@@ -3,123 +3,150 @@
 
 # TODO: add some more comments!
 
-#import audio module, 'wave' sound file module, and multiple thread module
-import pyaudio, wave, threading
-#import some stuff from the random module
-from random import randint, randrange
-#import module to find console size
-import console_size
-#the consol_size and pyaudio modules can be accessed from the files above.
+# Now modified to work in jython (java interpeter)
+# Sound has been modified - from a sound file to notes mapped from the bits themselves using a music composition library.
 
-#globalise constants
-#used for matrix generator (main)
-global CONSOLE_WIDTH
-global CONSOLE_HEIGHT
-(CONSOLE_WIDTH, CONSOLE_HEIGHT) = console_size.getTerminalSize()
+# the jythonMusic library is used in this program.
+# to run this program, the Java Development Kit, the jythonMusic library and possibly the JEM2 IDE are required.
+# the notes here are not a sample on a loop, but are instead calculated using the positions of the bits themselves.
+# (only ever 1000th bit is used, as the program is too fast for the notes to otherwise be distinguishable)
+# get the jythonMusic library and JEM2 at http://www.cs.cofc.edu/~manaris/jythonmusic/?page_id=23. , and the JDK at http://www.oracle.com/technetwork/java/javase/downloads/index.html
 
-global MAX_LENGTH
+#how to run in java through terminal : http://www.cs.cofc.edu/~manaris/jythonmusic/?page_id=463
+
+
+#import required modules
+
+from random import randint, randrange  #some random elements are used in this program.
+from music import *                    #the jythonMusic library required for music composition.
+import console_size                    # console_size is used to find out the size of the window the program is running in.
+
+# Get the size of the console.
+if console_size.getCurrentOS() == "Java":
+   #currently i cannot find a way to find the CONSOLE_WIDTH in java. Therefore, I have hard-coded the full screen width for macbook pro.
+   #(if this is not your terminal width, feel free to change this constant so that it works with your platform.)
+         
+   CONSOLE_WIDTH = 181
+else:
+   #in python, the console size can be determined using the console_size module.
+   (CONSOLE_WIDTH, CONSOLE_HEIGHT) = console_size.getTerminalSize()
+
+# CONFIGURATION FOR MAPPING NOTES FOR SOUND EFFECT#
+# =========================================== #   
+BitsPerNote = 1000                                  #constant to control rate of note generation
+INSTRUMENT = XYLOPHONE                              #instrument to play notes
+SCALE = CHROMATIC_SCALE                             #scale to filter notes to
+KEY = C4                                            #key of notes
+DURATION = TN/50                                    #duration of each note (TN = thirtysecond note)
+
+def playNote(value, minValue, maxValue, bit):
+   """plays a note based on the position of the current bit"""
+
+   #set instrument for channel 0 (the channel we will be using) to INSTRUMENT constant
+   Play.setInstrument(INSTRUMENT,0)
+
+   #set the pitch by mapping the range of the terminal window width onto the musical range C3 to C7
+   #(the notes are filtered to the constant SCALE, and the key is set to KEY)
+   pitch = mapScale(value, minValue, maxValue, C3, C7, SCALE, KEY)
+
+   #base dynamics on whether the bit is a 0 or a 1
+   if bit:
+      dynamic = randint(65,120)
+   else:
+      dynamic = randint(10,65)
+
+   #map panning (0 to 127- 0 is left speaker, 127 is right speaker) based on position of bit on terminal width
+   pan = mapValue(value, minValue, maxValue, 0, 127)
+   #add panning to channel 0 (channel being used)
+   Play.setPanning(pan,0)
+
+   #play the note (pitch of note = pitch, play after 0ms, duration = DURATION constant, volume = dynamic, channel =  0)
+   Play.note(pitch, 0, DURATION, dynamic, 0)
+
+   
+# CONFIGURATION FOR ANIMATION #
+# =========================== #
+
 MAX_LENGTH = 10
 
-global MAX_CHANGE_EACH_TIME
 MAX_CHANGE_EACH_TIME = int(CONSOLE_WIDTH / 5)
 
-#used for sound
-global CHUNK
-CHUNK = 1024
+#    END OF CONFIGURATION     #
+#    --------------------     #
 
-#random bit lambda function
+
+# Used to generate a random bit to display on the screen in the animation.
 randbit = lambda: randint(0, 1)
+   
 
-
+      
 def generateLines():
-    """generates something that's used in procedure main
-    jfla can explain it"""
+    """Generate a random set of column numbers of random length, each of which respresents a line going down the screen. This can be used to create a list of lines to remove from, or add to the screen."""
     lines = set()
 
+    # Generate the number of lines to be chosen, which must be between 1 and MAX_CHANGE_EACH_TIME.
     numToChange = randint(1, MAX_CHANGE_EACH_TIME)
 
+    # Generate the column numbers for the lines.
     for i in range(numToChange):
         lines.add(randrange(CONSOLE_WIDTH))
-    
+
     return lines
-    
-    
-class Application():
-    """a class with most of the stuff for running the program in it"""
-    
-    def __init__(self):
-        """runs when an application object is created"""
-        # instantiate PyAudio
-        self.p = pyaudio.PyAudio()
-        """get sound from file and
-        create a stream to stream it on"""
-        self.sound()
-        #something to do with matrix generator
-        self.lines = set()
-        #begin program
-        self.begin()
-
-    def sound(self):
-        """gets sound from a file"""
-        #use wave module to open a wav file
-        self.sounds = wave.open('/Users/glenmcconkey/Documents/Almanzos_folder/Python_music/matrix.wav', 'rb')
-        # open stream
-        self.stream = self.p.open(format=self.p.get_format_from_width(self.sounds.getsampwidth()),
-                channels=self.sounds.getnchannels(),
-                rate=self.sounds.getframerate(),
-                output=True)
 
 
-    def playMusic(self): 
-        """loops a sound widget"""
-        #loop forever
-        while True:
-            # read the next chunk of data from the wav file
-            self.data = self.sounds.readframes(CHUNK)
-            #while data is being read
-            while self.data != '':
-                #write data onto the stream to play it
-                self.stream.write(self.data)
-                #read the next chunk of data from the wav file
-                self.data = self.sounds.readframes(CHUNK)
-            #rewind the track to the beginning
-            self.sounds.rewind()
-        
-        
-    def main(self):
-        """runs the matrix generator part of the program"""
-        #loops forever
-        while True:
-            #ask jfla how this bit works
-            if len(self.lines) > 0 + MAX_CHANGE_EACH_TIME:
-                self.lines -= generateLines()
-        
-            if len(self.lines) < CONSOLE_WIDTH - MAX_CHANGE_EACH_TIME:
-                self.lines |= generateLines()
+def displayAnimation():
+    """Displays the actual animation."""
 
-            linesList = list(self.lines)
+    lines = set()
+    #count bits to stagger note output
+    count = 0
+    # Loop forever.
+    while True:
 
-            linesList.sort()
+        #keep the number of lines inside the max change each time.
+        if len(lines) > 0 + MAX_CHANGE_EACH_TIME:
+            lines -= generateLines()
 
-            for i, l in enumerate(linesList):
-                if i == 0:
-                    numSpacesToAdd = l
-                else:
-                    # Have to -1 since one of the columns will have already been used up
-                    # by the previous line.
-                    numSpacesToAdd = l - linesList[i-1] - 1
+        if len(lines) < CONSOLE_WIDTH - MAX_CHANGE_EACH_TIME:
+            lines |= generateLines()
 
-                print(" " * numSpacesToAdd + str(randbit()), end='')
+        linesList = list(lines)
 
-            print()
-    
-    def begin(self):
-        """runs the whole program"""
-        #create and run a second thread which plays the sound
-        threading.Thread(target = self.playMusic).start()
-        #run the matrix generator part of the program
-        self.main()
+        linesList.sort()
 
-#create an object to start the program
-Application()
+        row = ""           #var to store this row of bits
+        for i in range(len(linesList)):
+            #increase count
+            count += 1
 
+            #find linesList element at this index
+            #(currently enumerate is not working for me in jython)
+            l = linesList[i]
+
+            #number of spaces to add is the position of the current bit minus the position of the bit before it.
+             
+            if i == 0:
+                numSpacesToAdd = l-1
+            else:
+                # Have to -1 since one of the columns will have already been used up
+                # by the previous line.
+                numSpacesToAdd = l - linesList[i-1] - 1
+
+            #add some random bit
+            bit = randbit()
+
+            #every 1000th bit, play a note associating with that bit's position on the screen width
+            if count >= BitsPerNote:
+               playNote(l, 0, CONSOLE_WIDTH, bit)
+               #reset count
+               count = 0
+               
+            row += " " * numSpacesToAdd + str(bit)        #add bit to row
+
+        #output this row
+        print row
+
+
+
+# Begin your hacking adventure!
+displayAnimation()
