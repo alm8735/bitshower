@@ -22,6 +22,11 @@ def getTerminalSize():
        tuple_xy = (80, 25)      # default value
    return tuple_xy
 
+def getCurrentOS():
+   import platform
+   current_os = platform.system()
+   return current_os
+   
 def _getTerminalSize_windows():
     return 79
 
