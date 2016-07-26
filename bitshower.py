@@ -8,16 +8,15 @@
 
 # the jythonMusic library is used in this program.
 # to run this program, the Java Development Kit, the jythonMusic library and possibly the JEM2 IDE are required.
-# the notes here are not a sample on a loop, but are instead calculated using the positions of the bits themselves.
-# (only ever 1000th bit is used, as the program is too fast for the notes to otherwise be distinguishable)
+# the notes here are not a sample on a loop, but are instead calculated using the positions of the first bit of each line.
+# (only every (LinesPerNote)th bit is used, as the program is too fast for the notes to otherwise be distinguishable)
 # get the jythonMusic library and JEM2 at http://www.cs.cofc.edu/~manaris/jythonmusic/?page_id=23. , and the JDK at http://www.oracle.com/technetwork/java/javase/downloads/index.html
 
 #how to run in java through terminal : http://www.cs.cofc.edu/~manaris/jythonmusic/?page_id=463
 
-
 #import required modules
 
-from random import randint, randrange  #some random elements are used in this program.
+from random import randint, randrange, choice  #some random elements are used in this program.
 from music import *                    #the jythonMusic library required for music composition.
 import console_size                    # console_size is used to find out the size of the window the program is running in.
 
@@ -26,16 +25,18 @@ if console_size.getCurrentOS() == "Java":
    #currently i cannot find a way to find the CONSOLE_WIDTH in java. Therefore, I have hard-coded the full screen width for macbook pro.
    #(if this is not your terminal width, feel free to change this constant so that it works with your platform.)
          
-   CONSOLE_WIDTH = 181
+   CONSOLE_WIDTH = 204
+   print("Current OS = Java. Console Width set to Default: %s \n\n"  %(CONSOLE_WIDTH) )
 else:
    #in python, the console size can be determined using the console_size module.
    (CONSOLE_WIDTH, CONSOLE_HEIGHT) = console_size.getTerminalSize()
+   print("Current OS = %s. Console Width set to %s" %(console_size.getCurrentOS(), CONSOLE_WIDTH) )
 
 # CONFIGURATION FOR MAPPING NOTES FOR SOUND EFFECT#
 # =========================================== #   
-BitsPerNote = 1000                                  #constant to control rate of note generation
-INSTRUMENT = XYLOPHONE                              #instrument to play notes
-SCALE = CHROMATIC_SCALE                             #scale to filter notes to
+LinesPerNote = 5500                                 #constant to control rate of note generation
+INSTRUMENT = GLOCKENSPIEL                           #instrument to play notes
+SCALE = PENTATONIC_SCALE                            #scale to filter notes to
 KEY = C4                                            #key of notes
 DURATION = TN/50                                    #duration of each note (TN = thirtysecond note)
 
@@ -53,7 +54,7 @@ def playNote(value, minValue, maxValue, bit):
    if bit:
       dynamic = randint(65,120)
    else:
-      dynamic = randint(10,65)
+      dynamic = randint(20,65)
 
    #map panning (0 to 127- 0 is left speaker, 127 is right speaker) based on position of bit on terminal width
    pan = mapValue(value, minValue, maxValue, 0, 127)
@@ -69,7 +70,11 @@ def playNote(value, minValue, maxValue, bit):
 
 MAX_LENGTH = 10
 
-MAX_CHANGE_EACH_TIME = int(CONSOLE_WIDTH / 5)
+# the maximum number of lines to be added or removed each time
+MAX_CHANGE_EACH_TIME = int(CONSOLE_WIDTH / 10)
+
+# the maximum displacement of a new line from its random relating existing line
+MAX_DISP_EACH_TIME = int(CONSOLE_WIDTH / 65)
 
 #    END OF CONFIGURATION     #
 #    --------------------     #
@@ -79,17 +84,30 @@ MAX_CHANGE_EACH_TIME = int(CONSOLE_WIDTH / 5)
 randbit = lambda: randint(0, 1)
    
 
-      
-def generateLines():
+def generateLines(currentLines):
     """Generate a random set of column numbers of random length, each of which respresents a line going down the screen. This can be used to create a list of lines to remove from, or add to the screen."""
     lines = set()
+
+    def relatePosition(currentLines):
+         """ add each new line close to the existing ones"""
+         sign = choice( [1, -1] )
+         relatingLine = choice( list(currentLines) )
+         displacement = sign * randrange(0, MAX_DISP_EACH_TIME)
+         
+         if relatingLine + displacement not in range(0, CONSOLE_WIDTH):
+             displacement = -displacement
+
+         return relatingLine + displacement
 
     # Generate the number of lines to be chosen, which must be between 1 and MAX_CHANGE_EACH_TIME.
     numToChange = randint(1, MAX_CHANGE_EACH_TIME)
 
     # Generate the column numbers for the lines.
     for i in range(numToChange):
-        lines.add(randrange(CONSOLE_WIDTH))
+        if currentLines: newLine = relatePosition(currentLines)
+        else: newLine = randrange(CONSOLE_WIDTH)
+        
+        lines.add( newLine )
 
     return lines
 
@@ -102,17 +120,34 @@ def displayAnimation():
     count = 0
     # Loop forever.
     while True:
-
+        
+        # save whether lines added or removed
+        linesAreAdded = False
+        # lines before lines added and / or removed
+        linesBeforeChange = set(lines)
+        
         #keep the number of lines inside the max change each time.
         if len(lines) > 0 + MAX_CHANGE_EACH_TIME:
-            lines -= generateLines()
+            lines -= generateLines(lines)
+
 
         if len(lines) < CONSOLE_WIDTH - MAX_CHANGE_EACH_TIME:
-            lines |= generateLines()
+         
+            # lines that may be added to animation
+            linesToAdd = generateLines(lines)
+          
+            lines |= linesToAdd
+            # new lines have been added to lines
+            linesAreAdded = True
+
 
         linesList = list(lines)
 
         linesList.sort()
+
+ ##       print(linesList)
+ ##       print(newLines)
+ ##       print(linesAdded)
 
         row = ""           #var to store this row of bits
         for i in range(len(linesList)):
@@ -120,7 +155,7 @@ def displayAnimation():
             count += 1
 
             #find linesList element at this index
-            #(currently enumerate is not working for me in jython)
+            #(currently enumerate() is not working for me in jython)
             l = linesList[i]
 
             #number of spaces to add is the position of the current bit minus the position of the bit before it.
@@ -134,12 +169,16 @@ def displayAnimation():
 
             #add some random bit
             bit = randbit()
-
-            #every 1000th bit, play a note associating with that bit's position on the screen width
-            if count >= BitsPerNote:
+            
+            #every (BitsPerNote)th time a new line is added, play a note associated with that bit
+            if linesAreAdded and (l in linesToAdd) and (l not in linesBeforeChange) and (count >= LinesPerNote):
                playNote(l, 0, CONSOLE_WIDTH, bit)
                #reset count
                count = 0
+               
+##            if linesAreAdded and (l in linesToAdd) and (l not in linesBeforeChange):
+##               bit = 5
+##               print l, linesToAdd, linesBeforeChange
                
             row += " " * numSpacesToAdd + str(bit)        #add bit to row
 
